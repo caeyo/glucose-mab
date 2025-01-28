@@ -1,0 +1,15 @@
+- Bumping activity remains the same
+- uncheckedEnqueue function is same
+    calls are mostly the same, there's one extra in propagate() in glucose (line 1001) that's called when propagating
+    binary clauses and it no longer has the one in implies() in minisat
+
+	however there are two versions, a simpleUncheckEnqueue and the regular uncheckedEnqueue. Former is in lcm.cc - what
+	does it do? these are the only relevant writes to assigns[] though, + the initialisation, so the same spots as in
+	minisat will work here - aside from simpleUncheckEnqueue
+
+	I'm just gonna chuck it in lcm.cc right now and see what happens, I'm not sure what that simple functions are doing
+	yet
+
+- pickBranchLit
+	there's some points about randomizing on restarts
+	otherwise it's basically the same
