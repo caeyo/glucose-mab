@@ -9,7 +9,10 @@
 
 	I'm just gonna chuck it in lcm.cc right now and see what happens, I'm not sure what that simple functions are doing
 	yet
-
 - pickBranchLit
 	there's some points about randomizing on restarts
 	otherwise it's basically the same
+
+- TODOs:
+	- What is the lcm.cc/simple approach? Is that preprocessing? - this is main concern - yes it is preprocessing
+	- Randomise first descent or no (I've left at no, probably ineffectual)

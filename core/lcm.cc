@@ -183,6 +183,10 @@ CRef Solver::simplePropagateUnaryWatches(Lit p) {
 void Solver::simpleUncheckEnqueue(Lit p, CRef from){
     assert(value(p) == l_Undef);
     assigns[var(p)] = lbool(!sign(p)); // this makes a lbool object whose value is sign(p)
+    // UCB
+    // ++assignsCount[var(p)];
+    // Will leave here for now to track it, but we suspect it won't be useful since lcm is used during preprocessing,
+    // not search
     vardata[var(p)].reason = from;
     trail.push_(p);
 }

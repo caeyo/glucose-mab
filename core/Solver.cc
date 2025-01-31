@@ -118,6 +118,11 @@ static BoolOption opt_fixed_randomize_phase_on_restarts(_cat, "fix-phas-rest", "
 static BoolOption opt_adapt(_cat, "adapt", "Adapt dynamically stategies after 100000 conflicts", true);
 
 static BoolOption opt_forceunsat(_cat,"forceunsat","Force the phase for UNSAT",true);
+
+// UCB params
+static BoolOption opt_ucb(_cat, "ucb", "Use UCB", false);
+static DoubleOption opt_ucb_hyperparam(_cat, "ucb-hparam", "UCB hyper param value", 1, DoubleRange(0, false, HUGE_VAL, false));
+
 //=================================================================================================
 // Constructor/Destructor:
 
@@ -197,6 +202,10 @@ verbosity(0)
 , nbUnsatCalls(0)
         // simplify
 , performLCM(1)
+
+// UCB
+, ucb(opt_ucb)
+, ucbHyperParam(opt_ucb_hyperparam)
 {
     MYFLAG = 0;
     // Initialize only first time. Useful for incremental solving (not in // version), useless otherwise
@@ -285,6 +294,9 @@ Solver::Solver(const Solver &s) :
 , nbSatCalls(s.nbSatCalls)
 , nbUnsatCalls(s.nbUnsatCalls)
 , performLCM(s.performLCM)
+// UCB params
+, ucb(s.ucb)
+, ucbHyperParam(s.ucbHyperParam)
 {
     // Copy clauses.
     s.ca.copyTo(ca);
@@ -320,7 +332,8 @@ Solver::Solver(const Solver &s) :
     s.forceUNSAT.copyTo(forceUNSAT);
     s.stats.copyTo(stats);
 
-
+    // UCB
+    s.assignsCount.copyTo(assignsCount);
 }
 
 
@@ -400,6 +413,8 @@ Var Solver::newVar(bool sign, bool dvar) {
     trail.capacity(v + 1);
     setDecisionVar(v, dvar);
 
+    // UCB
+    assignsCount.push(1);
 
     return v;
 }
@@ -625,8 +640,9 @@ void Solver::cancelUntil(int level) {
 Lit Solver::pickBranchLit() {
     Var next = var_Undef;
 
+    // UCB: first 2 blocks are e-greedy, this is what we are replacing. For now will leave the rest?
     // Random decision:
-    if(((randomizeFirstDescent && conflicts == 0) || drand(random_seed) < random_var_freq) && !order_heap.empty()) {
+    if(!ucb && ((randomizeFirstDescent && conflicts == 0) || drand(random_seed) < random_var_freq) && !order_heap.empty()) {
         next = order_heap[irand(random_seed, order_heap.size())];
         if(value(next) == l_Undef && decision[next])
             stats[rnd_decisions]++;
@@ -651,6 +667,7 @@ Lit Solver::pickBranchLit() {
 
     if(next == var_Undef) return lit_Undef;
 
+    // UCB: by default forceUnsatOnNewDescent is true
     if(forceUnsatOnNewDescent && newDescent) {
         if(forceUNSAT[next] != 0)
             return mkLit(next, forceUNSAT[next] < 0);
@@ -658,6 +675,8 @@ Lit Solver::pickBranchLit() {
 
     }
 
+    // UCB: note we don't care about polarity for UCB decision heuristics. Arms are just variables, we ignore
+    // polarity (at the moment at least)
     return next == var_Undef ? lit_Undef : mkLit(next, rnd_pol ? drand(random_seed) < 0.5 : polarity[next]);
 }
 
@@ -852,6 +871,7 @@ void Solver::analyze(CRef confl, vec <Lit> &out_learnt, vec <Lit> &selectors, in
     // Compute LBD
     lbd = computeLBD(out_learnt, out_learnt.size() - selectors.size());
 
+    // UCB - note, this is a change to VSIDS (only minor and doesn't affect UCB though)
     // UPDATEVARACTIVITY trick (see competition'09 companion paper)
     if(lastDecisionLevel.size() > 0) {
         for(int i = 0; i < lastDecisionLevel.size(); i++) {
@@ -952,6 +972,8 @@ void Solver::analyzeFinal(Lit p, vec <Lit> &out_conflict) {
 void Solver::uncheckedEnqueue(Lit p, CRef from) {
     assert(value(p) == l_Undef);
     assigns[var(p)] = lbool(!sign(p));
+    // UCB
+    ++assignsCount[var(p)];
     vardata[var(p)] = mkVarData(from, decisionLevel());
     trail.push_(p);
 }
