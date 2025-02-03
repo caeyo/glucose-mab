@@ -122,6 +122,7 @@ static BoolOption opt_forceunsat(_cat,"forceunsat","Force the phase for UNSAT",t
 // UCB params
 static BoolOption opt_ucb(_cat, "ucb", "Use UCB", false);
 static DoubleOption opt_ucb_hyperparam(_cat, "ucb-hparam", "UCB hyper param value", 1, DoubleRange(0, false, HUGE_VAL, false));
+static BoolOption opt_csv(_cat, "csv", "Output stats to a single-line csv file", false);
 
 //=================================================================================================
 // Constructor/Destructor:
@@ -206,6 +207,8 @@ verbosity(0)
 // UCB
 , ucb(opt_ucb)
 , ucbHyperParam(opt_ucb_hyperparam)
+, csv(opt_csv)
+, totalAssigns(0)
 {
     MYFLAG = 0;
     // Initialize only first time. Useful for incremental solving (not in // version), useless otherwise
@@ -972,8 +975,11 @@ void Solver::analyzeFinal(Lit p, vec <Lit> &out_conflict) {
 void Solver::uncheckedEnqueue(Lit p, CRef from) {
     assert(value(p) == l_Undef);
     assigns[var(p)] = lbool(!sign(p));
+
     // UCB
     ++assignsCount[var(p)];
+    ++totalAssigns;
+
     vardata[var(p)] = mkVarData(from, decisionLevel());
     trail.push_(p);
 }

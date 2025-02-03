@@ -274,6 +274,11 @@ public:
     // Important stats completely related to search. Keep here
     uint64_t solves,starts,decisions,propagations,conflicts,conflictsRestarts;
 
+    // UCB stats
+    uint64_t totalAssigns;
+    // UCB csv
+    bool csv;
+
 protected:
 
     long curRestart;
