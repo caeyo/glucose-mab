@@ -176,6 +176,7 @@ int main(int argc, char** argv)
         IntOption    cpu_lim("MAIN", "cpu-lim","Limit on CPU time allowed in seconds.\n", INT32_MAX, IntRange(0, INT32_MAX));
         IntOption    mem_lim("MAIN", "mem-lim","Limit on memory usage in megabytes.\n", INT32_MAX, IntRange(0, INT32_MAX));
  //       BoolOption opt_incremental ("MAIN","incremental", "Use incremental SAT solving",false);
+        BoolOption opt_hard_timeout ("MAIN", "hard-to", "Use a hard timeout (don't point SIGXCPU to signal handlers)", false);
 
          BoolOption    opt_certified      (_certified, "certified",    "Certified UNSAT using DRUP format", false);
          StringOption  opt_certified_file      (_certified, "certified-output",    "Certified UNSAT output file", "NULL");
@@ -214,7 +215,9 @@ int main(int argc, char** argv)
         // Use signal handlers that forcibly quit until the solver will be able to respond to
         // interrupts:
         signal(SIGINT, SIGINT_exit);
-        signal(SIGXCPU,SIGINT_exit);
+        if (!opt_hard_timeout) {
+            signal(SIGXCPU,SIGINT_exit);
+        }
 
 
         // Set limit on CPU-time:
@@ -265,7 +268,9 @@ int main(int argc, char** argv)
         // Change to signal-handlers that will only notify the solver and allow it to terminate
         // voluntarily:
         signal(SIGINT, SIGINT_interrupt);
-        signal(SIGXCPU,SIGINT_interrupt);
+        if (!opt_hard_timeout) {
+            signal(SIGXCPU,SIGINT_interrupt);
+        }
 
         S.parsing = 0;
         if(pre/* && !S.isIncremental()*/) {
