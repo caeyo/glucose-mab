@@ -138,15 +138,22 @@ static Solver* solver;
 // for this feature of the Solver as it may take longer than an immediate call to '_exit()'.
 static void SIGINT_interrupt(int signum) { solver->interrupt(); }
 
+static FILE* outfile;
 // Note that '_exit()' rather than 'exit()' has to be used. The reason is that 'exit()' calls
 // destructors and may cause deadlocks if a malloc/free function happens to be running (these
 // functions are guarded by locks for multithreaded use).
 static void SIGINT_exit(int signum) {
-    printf("\n"); printf("*** INTERRUPTED ***\n");
-    if (solver->verbosity > 0){
-        printStats(*solver);
-        printf("\n"); printf("*** INTERRUPTED ***\n"); }
-    _exit(1); }
+    if (solver->csv && outfile != NULL && ftell(outfile) != -1) {
+        outputCSV(*solver, outfile, l_Undef);
+    } else {
+        printf("\n"); printf("*** INTERRUPTED ***\n");
+        if (solver->verbosity > 0) {
+            printStats(*solver);
+            printf("\n"); printf("*** INTERRUPTED ***\n");
+        }
+    }
+    _exit(1);
+}
 
 
 //=================================================================================================
@@ -250,6 +257,7 @@ int main(int argc, char** argv)
             printf("c |                                                                                                       |\n"); }
 
         FILE* res = (argc >= 3) ? fopen(argv[argc-1], "wb") : NULL;
+        outfile = res;
         parse_DIMACS(in, S);
         gzclose(in);
 
@@ -266,6 +274,9 @@ int main(int argc, char** argv)
         // voluntarily:
         signal(SIGINT, SIGINT_interrupt);
         signal(SIGXCPU,SIGINT_interrupt);
+        // Keep SIGTERM on exit to handle hard external timeouts - glucose has a tendency to overrun its cpu limit
+        // in spite of the above handler, which is bad for benchmarks
+        signal(SIGTERM, SIGINT_exit);
 
         S.parsing = 0;
         if(pre/* && !S.isIncremental()*/) {
