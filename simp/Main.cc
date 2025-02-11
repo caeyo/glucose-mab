@@ -145,6 +145,7 @@ static FILE* outfile;
 static void SIGINT_exit(int signum) {
     if (solver->csv && outfile != NULL && ftell(outfile) != -1) {
         outputCSV(*solver, outfile, l_Undef);
+        fclose(outfile);
     } else {
         printf("\n"); printf("*** INTERRUPTED ***\n");
         if (solver->verbosity > 0) {
