@@ -176,7 +176,6 @@ int main(int argc, char** argv)
         IntOption    cpu_lim("MAIN", "cpu-lim","Limit on CPU time allowed in seconds.\n", INT32_MAX, IntRange(0, INT32_MAX));
         IntOption    mem_lim("MAIN", "mem-lim","Limit on memory usage in megabytes.\n", INT32_MAX, IntRange(0, INT32_MAX));
  //       BoolOption opt_incremental ("MAIN","incremental", "Use incremental SAT solving",false);
-        BoolOption opt_hard_timeout ("MAIN", "hard-to", "Use a hard timeout (don't point SIGXCPU to signal handlers)", false);
 
          BoolOption    opt_certified      (_certified, "certified",    "Certified UNSAT using DRUP format", false);
          StringOption  opt_certified_file      (_certified, "certified-output",    "Certified UNSAT output file", "NULL");
