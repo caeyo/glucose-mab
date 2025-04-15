@@ -1,0 +1,18 @@
+Two decay params here:
+- var_decay is applied as usual
+- But there is a max_var_decay now
+- They start var_decay at 0.8, max_var_decay at 0.95. Then, during search(), if a conflict is found, following code is run
+            if(conflicts % 5000 == 0 && var_decay < max_var_decay)
+                var_decay += 0.01;
+	- So they're starting decay more aggressive and reducing it over time to max_var_decay
+- There is also an adaptSolver() that is applied during a search if a conflict is found, following code is executed
+            if(adaptStrategies && conflicts == 100000) {
+                cancelUntil(0);
+                adaptSolver();
+                adaptStrategies = false;
+                return l_Undef;
+            }
+	- adaptStrategies initialised to true in solver config (opt_adapt). So I guess this is applied once then turned off
+  In it, it messes with var_decay and max_var_decay. Check the method for specifics, there's three cases
+
+Aside from considering decay val carefully, lsids changes should be easy to apply
