@@ -15,4 +15,22 @@ Two decay params here:
 	- adaptStrategies initialised to true in solver config (opt_adapt). So I guess this is applied once then turned off
   In it, it messes with var_decay and max_var_decay. Check the method for specifics, there's three cases
 
-Aside from considering decay val carefully, lsids changes should be easy to apply
+Aside from considering decay val carefully, lsids changes should be applicable
+- Issues:
+	- Heap
+		- Now only takes ints. Lits can be "cast" down to ints via clever code when we need to, but
+		so many other things still take `Lit` types that I wonder if it wouldn't be better to
+		re-genericise the Heap class like it is in minisat
+			- Then again, the places where we would actually need to "cast" are minimal, basically
+			only in insertion. There would just have to be some "casting"
+			- Why cast? Well often we are inserting from `vec<Lit> trail`. The solver still uses
+			the Lit struct type in a number of places and we interact with those in some ways,
+			so at some point we will have to go from Lit to int via Lit.x and { x=int }
+		- Need to allow applying a custom indexing lambda to apply when trying to index into
+		`indices` - the `heap` is fine. If the above happens then this has to happen anyway,
+		if it doesn't then necessary just for using lits with it
+			- Don't have to go the full minisat route with IntMap, I think there's a way to
+			just apply an indexer when needed in the Heap directly - basically just at any use of
+			`indices` it would be needed
+		- Also note that comparator has to take types mappable to int rn (i.e. just Var), because
+		its usage in the Heap class assumes it can just pass them in directly
