@@ -118,6 +118,8 @@ static BoolOption opt_fixed_randomize_phase_on_restarts(_cat, "fix-phas-rest", "
 static BoolOption opt_adapt(_cat, "adapt", "Adapt dynamically stategies after 100000 conflicts", true);
 
 static BoolOption opt_forceunsat(_cat,"forceunsat","Force the phase for UNSAT",true);
+
+static BoolOption opt_csv(_cat, "csv", "Output stats to a single-line csv file", false);
 //=================================================================================================
 // Constructor/Destructor:
 
@@ -197,6 +199,7 @@ verbosity(0)
 , nbUnsatCalls(0)
         // simplify
 , performLCM(1)
+, csv(opt_csv)
 {
     MYFLAG = 0;
     // Initialize only first time. Useful for incremental solving (not in // version), useless otherwise

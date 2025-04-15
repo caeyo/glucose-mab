@@ -92,6 +92,44 @@ void printStats(Solver& solver)
     printf("c CPU time              : %g s\n", cpu_time);
 }
 
+void outputCSV(Solver &solver, FILE *out, lbool result) {
+    // time,number_vars,number_clauses,restarts,conflicts,decisions,propagations,total_pulls,
+
+    // blocked_restarts,blocked_restarts_multiple,last_block_at_restart,nb_reduce_db,nb_removed_clauses,avg_learnt_size,
+    // nb_learnts_dl2,nb_learnts_size2,nb_learnts_size1,nb_reduced_clauses,lcm_reduced,lcm_tested,
+
+    // result
+
+    double cpu_time = cpuTime();
+    fprintf(out, "%g,", cpu_time);
+    fprintf(out, "%d,", solver.nVars());
+    fprintf(out, "%d,", solver.nClauses());
+    fprintf(out, "%" PRIu64",", solver.starts);
+    fprintf(out, "%" PRIu64",", solver.conflicts);
+    fprintf(out, "%" PRIu64",", solver.decisions);
+    fprintf(out, "%" PRIu64",", solver.propagations);
+
+    fprintf(out, "%" PRIu64",", solver.stats[nbstopsrestarts]);
+    fprintf(out, "%" PRIu64",", solver.stats[nbstopsrestartssame]);
+    fprintf(out, "%" PRIu64",", solver.stats[lastblockatrestart]);
+    fprintf(out, "%" PRIu64",", solver.stats[nbReduceDB]);
+    fprintf(out, "%" PRIu64",", solver.stats[nbRemovedClauses]);
+    fprintf(out, "%" PRIu64",", solver.conflicts == 0 ? 0 : solver.stats[sumSizes] / solver.conflicts);
+    fprintf(out, "%" PRIu64",", solver.stats[nbDL2]);
+    fprintf(out, "%" PRIu64",", solver.stats[nbBin]);
+    fprintf(out, "%" PRIu64",", solver.stats[nbUn]);
+    fprintf(out, "%" PRIu64",", solver.stats[nbReducedClauses]);
+    fprintf(out, "%" PRIu64",", solver.stats[lcmreduced]);
+    fprintf(out, "%" PRIu64",", solver.stats[lcmtested]);
+
+    if (result == l_True) {
+        fprintf(out, "SAT");
+    } else if (result == l_False) {
+        fprintf(out, "UNSAT");
+    } else {
+        fprintf(out, "INDET");
+    }
+}
 
 
 static Solver* solver;
@@ -99,15 +137,23 @@ static Solver* solver;
 // for this feature of the Solver as it may take longer than an immediate call to '_exit()'.
 static void SIGINT_interrupt(int signum) { solver->interrupt(); }
 
+static FILE* outfile;
 // Note that '_exit()' rather than 'exit()' has to be used. The reason is that 'exit()' calls
 // destructors and may cause deadlocks if a malloc/free function happens to be running (these
 // functions are guarded by locks for multithreaded use).
 static void SIGINT_exit(int signum) {
-    printf("\n"); printf("*** INTERRUPTED ***\n");
-    if (solver->verbosity > 0){
-        printStats(*solver);
-        printf("\n"); printf("*** INTERRUPTED ***\n"); }
-    _exit(1); }
+    if (solver->csv && outfile != NULL && ftell(outfile) != -1) {
+        outputCSV(*solver, outfile, l_Undef);
+        fclose(outfile);
+    } else {
+        printf("\n"); printf("*** INTERRUPTED ***\n");
+        if (solver->verbosity > 0) {
+            printStats(*solver);
+            printf("\n"); printf("*** INTERRUPTED ***\n");
+        }
+    }
+    _exit(1);
+}
 
 
 //=================================================================================================
@@ -211,6 +257,7 @@ int main(int argc, char** argv)
             printf("c |                                                                                                       |\n"); }
 
         FILE* res = (argc >= 3) ? fopen(argv[argc-1], "wb") : NULL;
+        outfile = res;
         parse_DIMACS(in, S);
         gzclose(in);
 
@@ -227,6 +274,9 @@ int main(int argc, char** argv)
         // voluntarily:
         signal(SIGINT, SIGINT_interrupt);
         signal(SIGXCPU,SIGINT_interrupt);
+        // Keep SIGTERM on exit to handle hard external timeouts - glucose has a tendency to overrun its cpu limit
+        // in spite of the above handler, which is bad for benchmarks
+        signal(SIGTERM, SIGINT_exit);
 
         S.parsing = 0;
         if(pre/* && !S.isIncremental()*/) {
@@ -240,7 +290,14 @@ int main(int argc, char** argv)
 	printf("c |                                                                                                       |\n");
         if (!S.okay()){
             if (S.certifiedUNSAT) fprintf(S.certifiedOutput, "0\n"), fclose(S.certifiedOutput);
-            if (res != NULL) fprintf(res, "UNSAT\n"), fclose(res);
+            if (res != NULL) {
+                if (S.csv) {
+                    outputCSV(S, res, l_False);
+                } else {
+                    fprintf(res, "UNSAT\n");
+                }
+                fclose(res);
+            }
             if (S.verbosity > 0){
  	        printf("c =========================================================================================================\n");
                printf("Solved by simplification\n");
@@ -267,18 +324,22 @@ int main(int argc, char** argv)
             printf("\n"); }
         printf(ret == l_True ? "s SATISFIABLE\n" : ret == l_False ? "s UNSATISFIABLE\n" : "s INDETERMINATE\n");
 
-        if (res != NULL){
-            if (ret == l_True){
-                printf("SAT\n");
-                for (int i = 0; i < S.nVars(); i++)
-                    if (S.model[i] != l_Undef)
-                        fprintf(res, "%s%s%d", (i==0)?"":" ", (S.model[i]==l_True)?"":"-", i+1);
-                fprintf(res, " 0\n");
+        if (res != NULL) {
+            if (S.csv) {
+                outputCSV(S, res, ret);
             } else {
-	      if (ret == l_False){
-		fprintf(res, "UNSAT\n");
-	      }
-	    }
+                if (ret == l_True) {
+                    printf("SAT\n");
+                    for (int i = 0; i < S.nVars(); i++)
+                        if (S.model[i] != l_Undef)
+                            fprintf(res, "%s%s%d", (i == 0) ? "" : " ", (S.model[i] == l_True) ? "" : "-", i + 1);
+                    fprintf(res, " 0\n");
+                } else {
+                    if (ret == l_False) {
+                        fprintf(res, "UNSAT\n");
+                    }
+                }
+            }
             fclose(res);
         } else {
 	  if(S.showModel && ret==l_True) {
