@@ -222,14 +222,12 @@ public:
     bool LCMUpdateLBD; // Updates the LBD when shrinking/replacing a clause with the vivification
 
     // Constant for heuristic
-    double    var_decay;
-    double    max_var_decay;
+    double    lit_decay;
+    double    max_lit_decay;
     double    clause_decay;
     double    random_var_freq;
     double    random_seed;
     int       ccmin_mode;         // Controls conflict clause minimization (0=none, 1=basic, 2=deep).
-    int       phase_saving;       // Controls the level of phase saving (0=none, 1=limited, 2=full).
-    bool      rnd_pol;            // Use random polarities for branching heuristics.
     bool      rnd_init_act;       // Initialize variable activities with a small random value.
     bool      randomizeFirstDescent; // the first decisions (until first cnflict) are made randomly
                                      // Useful for syrup!
@@ -317,8 +315,11 @@ protected:
 
     struct VarOrderLt {
         const vec<double>&  activity;
-        bool operator () (Var x, Var y) const { return activity[x] > activity[y]; }
-        VarOrderLt(const vec<double>&  act) : activity(act) { }
+        const vec<char>&    greater_pol;
+        bool operator () (Var x, Var y) const {
+            return activity[x + x + static_cast<int>(greater_pol[x])] > activity[y + y + static_cast<int>(greater_pol[y])];
+        }
+        VarOrderLt(const vec<double>&  act, const vec<char>& pol) : activity(act), greater_pol(pol) { }
     };
 
 
@@ -328,7 +329,7 @@ protected:
     bool                ok;               // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
     double              cla_inc;          // Amount to bump next clause with.
     vec<double>         activity;         // A heuristic measurement of the activity of a variable.
-    double              var_inc;          // Amount to bump next variable with.
+    double              lit_inc;          // Amount to bump next variable with.
     OccLists<Lit, vec<Watcher>, WatcherDeleted>
                         watches;          // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
     OccLists<Lit, vec<Watcher>, WatcherDeleted>
@@ -427,9 +428,9 @@ protected:
 
     // Maintaining Variable/Clause activity:
     //
-    void     varDecayActivity ();                      // Decay all variables with the specified factor. Implemented by increasing the 'bump' value instead.
-    void     varBumpActivity  (Var v, double inc);     // Increase a variable with the current 'bump' value.
-    void     varBumpActivity  (Var v);                 // Increase a variable with the current 'bump' value.
+    void     litDecayActivity ();                      // Decay all variables with the specified factor. Implemented by increasing the 'bump' value instead.
+    void     litBumpActivity  (Lit l, double inc);     // Increase a variable with the current 'bump' value.
+    void     litBumpActivity  (Lit l);                 // Increase a variable with the current 'bump' value.
     void     claDecayActivity ();                      // Decay all clauses with the specified factor. Implemented by increasing the 'bump' value instead.
     void     claBumpActivity  (Clause& c);             // Increase a clause with the current 'bump' value.
 
@@ -512,14 +513,19 @@ inline int  Solver::level (Var x) const { return vardata[x].level; }
 inline void Solver::insertVarOrder(Var x) {
     if (!order_heap.inHeap(x) && decision[x]) order_heap.insert(x); }
 
-inline void Solver::varDecayActivity() { var_inc *= (1 / var_decay); }
-inline void Solver::varBumpActivity(Var v) { varBumpActivity(v, var_inc); }
-inline void Solver::varBumpActivity(Var v, double inc) {
-    if ( (activity[v] += inc) > 1e100 ) {
+inline void Solver::litDecayActivity() { lit_inc *= (1 / lit_decay); }
+inline void Solver::litBumpActivity(Lit l) { litBumpActivity(l, lit_inc); }
+inline void Solver::litBumpActivity(Lit l, double inc) {
+    if ( (activity[l.x] += inc) > 1e100 ) {
         // Rescale:
-        for (int i = 0; i < nVars(); i++)
+        for (int i = 0; i < activity.size(); i++)
             activity[i] *= 1e-100;
-        var_inc *= 1e-100; }
+        lit_inc *= 1e-100; }
+
+    const Var v = var(l);
+    const Lit n = ~l;
+    if ((activity[l.x] > activity[n.x] && sign(l) != polarity[v]) || activity[l.x] == activity[n.x])
+        polarity[v] ^= 1;
 
     // Update order_heap with respect to new activity:
     if (order_heap.inHeap(v))

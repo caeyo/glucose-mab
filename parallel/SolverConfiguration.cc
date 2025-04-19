@@ -103,27 +103,27 @@ void SolverConfiguration::configureSAT14(MultiSolvers *ms, int nbsolvers) {
     
    if (nbsolvers < 2 ) return;
 
-   ms->solvers[1]->var_decay = 0.94;
-   ms->solvers[1]->max_var_decay = 0.96;
+   ms->solvers[1]->lit_decay = 0.94;
+   ms->solvers[1]->max_lit_decay = 0.96;
    ms->solvers[1]->firstReduceDB=600;
 
    if (nbsolvers < 3 ) return;
 
-   ms->solvers[2]->var_decay = 0.90;
-   ms->solvers[2]->max_var_decay = 0.97;
+   ms->solvers[2]->lit_decay = 0.90;
+   ms->solvers[2]->max_lit_decay = 0.97;
    ms->solvers[2]->firstReduceDB=500;
 
    if (nbsolvers < 4 ) return;
 
-   ms->solvers[3]->var_decay = 0.85;
-   ms->solvers[3]->max_var_decay = 0.93;
+   ms->solvers[3]->lit_decay = 0.85;
+   ms->solvers[3]->max_lit_decay = 0.93;
    ms->solvers[3]->firstReduceDB=400;
 
    if (nbsolvers < 5 ) return;
 
    // Glucose 2.0 (+ blocked restarts)
-   ms->solvers[4]->var_decay = 0.95;
-   ms->solvers[4]->max_var_decay = 0.95;
+   ms->solvers[4]->lit_decay = 0.95;
+   ms->solvers[4]->max_lit_decay = 0.95;
    ms->solvers[4]->firstReduceDB=4000;
    ms->solvers[4]->lbdQueue.growTo(100);
    ms->solvers[4]->sizeLBDQueue = 100;
@@ -132,21 +132,21 @@ void SolverConfiguration::configureSAT14(MultiSolvers *ms, int nbsolvers) {
 
    if (nbsolvers < 6 ) return;
 
-   ms->solvers[5]->var_decay = 0.93;
-   ms->solvers[5]->max_var_decay = 0.96;
+   ms->solvers[5]->lit_decay = 0.93;
+   ms->solvers[5]->max_lit_decay = 0.96;
    ms->solvers[5]->firstReduceDB=100;
    ms->solvers[5]->incReduceDB = 500;
 
    if (nbsolvers < 7 ) return;
 
-   ms->solvers[6]->var_decay = 0.75;
-   ms->solvers[6]->max_var_decay = 0.94;
+   ms->solvers[6]->lit_decay = 0.75;
+   ms->solvers[6]->max_lit_decay = 0.94;
    ms->solvers[6]->firstReduceDB=2000;
 
    if (nbsolvers < 8 ) return; 
 
-   ms->solvers[7]->var_decay = 0.94;
-   ms->solvers[7]->max_var_decay = 0.96;
+   ms->solvers[7]->lit_decay = 0.94;
+   ms->solvers[7]->max_lit_decay = 0.96;
    ms->solvers[7]->firstReduceDB=800;
 
    if (nbsolvers < 9) return;
@@ -163,10 +163,10 @@ void SolverConfiguration::configureSAT14(MultiSolvers *ms, int nbsolvers) {
    double noisevar_decay = 0.005;
    int noiseReduceDB = 50;
    for (int i=10;i<nbsolvers;i++) {
-       ms->solvers[i]-> var_decay = ms->solvers[i%8]->var_decay;
-       ms->solvers[i]-> max_var_decay = ms->solvers[i%8]->max_var_decay;
+       ms->solvers[i]-> lit_decay = ms->solvers[i%8]->lit_decay;
+       ms->solvers[i]-> max_lit_decay = ms->solvers[i%8]->max_lit_decay;
        ms->solvers[i]-> firstReduceDB= ms->solvers[i%8]->firstReduceDB;
-       ms->solvers[i]->var_decay += noisevar_decay;
+       ms->solvers[i]->lit_decay += noisevar_decay;
        ms->solvers[i]->firstReduceDB+=noiseReduceDB;
        if ((i+1) % 8 == 0) {
 	   noisevar_decay += 0.006;

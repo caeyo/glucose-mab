@@ -94,14 +94,13 @@ static IntOption opt_lb_lbd_minimzing_clause(_cm, "minLBDMinimizingClause", "The
 static BoolOption opt_lcm(_cm, "lcm", "Use inprocessing vivif (ijcai17 paper)", true);
 static BoolOption opt_lcm_update_lbd(_cm, "lcm-update", "Updates LBD when doing LCM", false);
 
-static DoubleOption opt_var_decay(_cat, "var-decay", "The variable activity decay factor (starting point)", 0.8, DoubleRange(0, false, 1, false));
-static DoubleOption opt_max_var_decay(_cat, "max-var-decay", "The variable activity decay factor", 0.95, DoubleRange(0, false, 1, false));
+static DoubleOption opt_lit_decay(_cat, "lit-decay", "The literal activity decay factor (starting point)", 0.8, DoubleRange(0, false, 1, false));
+static DoubleOption opt_max_lit_decay(_cat, "max-lit-decay", "The literal activity decay factor", 0.95, DoubleRange(0, false, 1, false));
 static DoubleOption opt_clause_decay(_cat, "cla-decay", "The clause activity decay factor", 0.999, DoubleRange(0, false, 1, false));
 static DoubleOption opt_random_var_freq(_cat, "rnd-freq", "The frequency with which the decision heuristic tries to choose a random variable", 0,
                                         DoubleRange(0, true, 1, true));
 static DoubleOption opt_random_seed(_cat, "rnd-seed", "Used by the random variable selection", 91648253, DoubleRange(0, false, HUGE_VAL, false));
 static IntOption opt_ccmin_mode(_cat, "ccmin-mode", "Controls conflict clause minimization (0=none, 1=basic, 2=deep)", 2, IntRange(0, 2));
-static IntOption opt_phase_saving(_cat, "phase-saving", "Controls the level of phase saving (0=none, 1=limited, 2=full)", 2, IntRange(0, 2));
 static BoolOption opt_rnd_init_act(_cat, "rnd-init", "Randomize the initial activity", false);
 static DoubleOption opt_garbage_frac(_cat, "gc-frac", "The fraction of wasted memory allowed before a garbage collection is triggered", 0.20,
                                      DoubleRange(0, false, HUGE_VAL, false));
@@ -143,14 +142,12 @@ verbosity(0)
 , lbLBDMinimizingClause(opt_lb_lbd_minimzing_clause)
 , useLCM(opt_lcm)
 , LCMUpdateLBD (opt_lcm_update_lbd)
-, var_decay(opt_var_decay)
-, max_var_decay(opt_max_var_decay)
+, lit_decay(opt_lit_decay)
+, max_lit_decay(opt_max_lit_decay)
 , clause_decay(opt_clause_decay)
 , random_var_freq(opt_random_var_freq)
 , random_seed(opt_random_seed)
 , ccmin_mode(opt_ccmin_mode)
-, phase_saving(opt_phase_saving)
-, rnd_pol(false)
 , rnd_init_act(opt_rnd_init_act)
 , randomizeFirstDescent(false)
 , garbage_frac(opt_garbage_frac)
@@ -175,14 +172,14 @@ verbosity(0)
 
 , ok(true)
 , cla_inc(1)
-, var_inc(1)
+, lit_inc(1)
 , watches(WatcherDeleted(ca))
 , watchesBin(WatcherDeleted(ca))
 , unaryWatches(WatcherDeleted(ca))
 , qhead(0)
 , simpDB_assigns(-1)
 , simpDB_props(0)
-, order_heap(VarOrderLt(activity))
+, order_heap(VarOrderLt(activity, polarity))
 , progress_estimate(0)
 , remove_satisfied(true)
 ,lastLearntClause(CRef_Undef)
@@ -232,14 +229,12 @@ Solver::Solver(const Solver &s) :
 , lbLBDMinimizingClause(s.lbLBDMinimizingClause)
 , useLCM(s.useLCM)
 , LCMUpdateLBD (s.LCMUpdateLBD)
-, var_decay(s.var_decay)
-, max_var_decay(s.max_var_decay)
+, lit_decay(s.lit_decay)
+, max_lit_decay(s.max_lit_decay)
 , clause_decay(s.clause_decay)
 , random_var_freq(s.random_var_freq)
 , random_seed(s.random_seed)
 , ccmin_mode(s.ccmin_mode)
-, phase_saving(s.phase_saving)
-, rnd_pol(s.rnd_pol)
 , rnd_init_act(s.rnd_init_act)
 , randomizeFirstDescent(s.randomizeFirstDescent)
 , garbage_frac(s.garbage_frac)
@@ -265,14 +260,14 @@ Solver::Solver(const Solver &s) :
 , forceUnsatOnNewDescent(s.forceUnsatOnNewDescent)
 , ok(true)
 , cla_inc(s.cla_inc)
-, var_inc(s.var_inc)
+, lit_inc(s.lit_inc)
 , watches(WatcherDeleted(ca))
 , watchesBin(WatcherDeleted(ca))
 , unaryWatches(WatcherDeleted(ca))
 , qhead(s.qhead)
 , simpDB_assigns(s.simpDB_assigns)
 , simpDB_props(s.simpDB_props)
-, order_heap(VarOrderLt(activity))
+, order_heap(VarOrderLt(activity, polarity))
 , progress_estimate(s.progress_estimate)
 , remove_satisfied(s.remove_satisfied)
 ,lastLearntClause(CRef_Undef)
@@ -394,6 +389,7 @@ Var Solver::newVar(bool sign, bool dvar) {
     unaryWatches.init(mkLit(v, true));
     assigns.push(l_Undef);
     vardata.push(mkVarData(CRef_Undef, 0));
+    activity.push(rnd_init_act ? drand(random_seed) * 0.00001 : 0);
     activity.push(rnd_init_act ? drand(random_seed) * 0.00001 : 0);
     seen.push(0);
     permDiff.push(0);
@@ -610,9 +606,6 @@ void Solver::cancelUntil(int level) {
         for(int c = trail.size() - 1; c >= trail_lim[level]; c--) {
             Var x = var(trail[c]);
             assigns[x] = l_Undef;
-            if(phase_saving > 1 || ((phase_saving == 1) && c > trail_lim.last())) {
-                polarity[x] = sign(trail[c]);
-            }
             insertVarOrder(x);
         }
         qhead = trail_lim[level];
@@ -628,11 +621,14 @@ void Solver::cancelUntil(int level) {
 Lit Solver::pickBranchLit() {
     Var next = var_Undef;
 
+    bool rand = false;
     // Random decision:
     if(((randomizeFirstDescent && conflicts == 0) || drand(random_seed) < random_var_freq) && !order_heap.empty()) {
         next = order_heap[irand(random_seed, order_heap.size())];
-        if(value(next) == l_Undef && decision[next])
+        if(value(next) == l_Undef && decision[next]) {
             stats[rnd_decisions]++;
+            rand = true;
+        }
     }
 
     // Activity based decision:
@@ -661,7 +657,7 @@ Lit Solver::pickBranchLit() {
 
     }
 
-    return next == var_Undef ? lit_Undef : mkLit(next, rnd_pol ? drand(random_seed) < 0.5 : polarity[next]);
+    return next == var_Undef ? lit_Undef : mkLit(next, rand ? drand(random_seed) < 0.5 : polarity[next]);
 }
 
 
@@ -741,7 +737,7 @@ void Solver::analyze(CRef confl, vec <Lit> &out_learnt, vec <Lit> &selectors, in
                 if(level(var(q)) == 0) {
                 } else { // Here, the old case
                     if(!isSelector(var(q)))
-                        varBumpActivity(var(q));
+                        litBumpActivity(q);
 
                     // This variable was responsible for a conflict,
                     // consider it as a UNSAT assignation for this literal
@@ -859,7 +855,7 @@ void Solver::analyze(CRef confl, vec <Lit> &out_learnt, vec <Lit> &selectors, in
     if(lastDecisionLevel.size() > 0) {
         for(int i = 0; i < lastDecisionLevel.size(); i++) {
             if(ca[reason(var(lastDecisionLevel[i]))].lbd() < lbd)
-                varBumpActivity(var(lastDecisionLevel[i]));
+                litBumpActivity(lastDecisionLevel[i]);
         }
         lastDecisionLevel.clear();
     }
@@ -1343,8 +1339,8 @@ void Solver::adaptSolver() {
         luby_restart = true;
         luby_restart_factor = 100;
 
-        var_decay = 0.999;
-        max_var_decay = 0.999;
+        lit_decay = 0.999;
+        max_lit_decay = 0.999;
         adjusted = true;
         printf("c Adjusting for low successive conflicts.\n");
     }
@@ -1354,14 +1350,14 @@ void Solver::adaptSolver() {
         glureduce = true;
         coLBDBound = 3;
         firstReduceDB = 30000;
-        var_decay = 0.99;
-        max_var_decay = 0.99;
+        lit_decay = 0.99;
+        max_lit_decay = 0.99;
         randomize_on_restarts = 1;
         adjusted = true;
     }
     if(stats[nbDL2] - stats[nbBin] > 20000) {
-        var_decay = 0.91;
-        max_var_decay = 0.91;
+        lit_decay = 0.91;
+        max_lit_decay = 0.91;
         adjusted = true;
         printf("c Adjusting for a very large number of true glue clauses found.\n");
     }
@@ -1476,8 +1472,8 @@ lbool Solver::search(int nof_conflicts) {
             conflicts++;
             conflictC++;
             conflictsRestarts++;
-            if(conflicts % 5000 == 0 && var_decay < max_var_decay)
-                var_decay += 0.01;
+            if(conflicts % 5000 == 0 && lit_decay < max_lit_decay)
+                lit_decay += 0.01;
 
             if(verbosity >= 1 && starts>0 && conflicts % verbEveryConflicts == 0) {
                 printf("c | %8d   %7d    %5d | %7d %8d %8d | %5d %8d   %6d %8d | %6.3f %% |\n",
@@ -1554,7 +1550,7 @@ lbool Solver::search(int nof_conflicts) {
                 uncheckedEnqueue(learnt_clause[0], cr);
 
             }
-            varDecayActivity();
+            litDecayActivity();
             claDecayActivity();
 
 
